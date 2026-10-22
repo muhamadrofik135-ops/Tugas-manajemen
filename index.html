@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Daftar Tugas</title>
+
+  <!-- PWA: tautan ke manifest + warna bilah status + ikon untuk iPhone -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tugas">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- CSS = gaya tampilan (setara atribut di activity_main.xml) -->
+  <style>
+    :root {
+      --bg: #eef1f8; --card: #ffffff; --text: #1d2233; --muted: #8a90a6;
+      --a1: #6366f1; --a2: #8b5cf6; --ok: #22c55e; --danger: #ef4444;
+      --shadow: 0 6px 20px rgba(60, 70, 120, .12);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #12141c; --card: #1d2030; --text: #eceef7; --muted: #8b91a8; --shadow: 0 6px 20px rgba(0,0,0,.4); }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; justify-content: center;
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .app { width: 100%; max-width: 430px; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header dengan gradasi + progres */
+    header {
+      background: linear-gradient(135deg, var(--a1), var(--a2));
+      color: #fff; padding: 28px 22px 36px; border-radius: 0 0 28px 28px;
+    }
+    header small { opacity: .8; letter-spacing: .5px; }
+    header h1 { margin: 4px 0 14px; font-size: 26px; }
+    #tvJumlah { font-size: 15px; opacity: .95; margin: 0 0 10px; }
+    .bar { height: 8px; background: rgba(255,255,255,.3); border-radius: 99px; overflow: hidden; }
+    #progres { height: 100%; width: 0; background: #fff; border-radius: 99px; transition: width .4s ease; }
+
+    /* Form input mengambang di bawah header */
+    .form {
+      display: flex; gap: 8px; margin: -22px 18px 0; padding: 8px;
+      background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+    }
+    #etTugas {
+      flex: 1; border: 0; outline: 0; background: transparent; color: var(--text);
+      font-size: 16px; padding: 10px 12px;
+    }
+    #btnTambah {
+      border: 0; cursor: pointer; color: #fff; font-size: 24px; width: 46px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--a1), var(--a2)); transition: transform .15s;
+    }
+    #btnTambah:active { transform: scale(.92); }
+
+    /* Daftar */
+    main { padding: 18px; flex: 1; }
+    #lvTugas { list-style: none; margin: 0; padding: 0; }
+    #lvTugas li {
+      display: flex; align-items: center; gap: 12px; padding: 14px;
+      background: var(--card); border-radius: 14px; margin-bottom: 10px;
+      box-shadow: var(--shadow); animation: masuk .3s ease;
+    }
+    @keyframes masuk { from { opacity: 0; transform: translateY(10px); } }
+    .cek {
+      width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--muted);
+      background: transparent; cursor: pointer; color: #fff; font-size: 14px; flex-shrink: 0;
+    }
+    li.selesai .cek { background: var(--ok); border-color: var(--ok); }
+    .teks { flex: 1; word-break: break-word; }
+    li.selesai .teks { text-decoration: line-through; color: var(--muted); }
+    .hapus { border: 0; background: transparent; color: var(--danger); font-size: 18px; cursor: pointer; }
+
+    .kosong { text-align: center; color: var(--muted); margin-top: 48px; }
+    .kosong span { font-size: 52px; display: block; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- HTML = struktur tampilan (setara activity_main.xml) -->
+  <div class="app">
+    <header>
+      <small>HARI INI</small>
+      <h1>Daftar Tugas</h1>
+      <p id="tvJumlah">Jumlah tugas: 0</p>
+      <div class="bar"><div id="progres"></div></div>
+    </header>
+
+    <div class="form">
+      <input id="etTugas" type="text" placeholder="Tulis tugas baru..." autocomplete="off">
+      <button id="btnTambah" aria-label="Tambah">+</button>
+    </div>
+
+    <main>
+      <ul id="lvTugas"></ul>
+      <div id="kosong" class="kosong"><span>📝</span>Belum ada tugas.<br>Tambahkan yang pertama!</div>
+    </main>
+  </div>
+
+  <!-- JavaScript = logika (setara MainActivity.java) -->
+  <script>
+    // KUNCI penyimpanan di browser (setara SharedPreferences di Android)
+    const KUNCI = "daftar-tugas-v1";
+
+    // Muat data tersimpan; kalau belum ada atau rusak, mulai dari daftar kosong
+    function muatData() {
+      try {
+        const tersimpan = JSON.parse(localStorage.getItem(KUNCI));
+        return Array.isArray(tersimpan) ? tersimpan : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    // Simpan data setiap kali berubah
+    function simpanData() {
+      try {
+        localStorage.setItem(KUNCI, JSON.stringify(daftarTugas));
+      } catch (e) { /* penyimpanan penuh atau diblokir: abaikan */ }
+    }
+
+    // DATA: tiap tugas berupa objek {teks, selesai}, setara ArrayList
+    const daftarTugas = muatData();
+
+    // LANGKAH 1: hubungkan variabel dengan elemen HTML (setara findViewById)
+    const etTugas   = document.getElementById("etTugas");
+    const btnTambah = document.getElementById("btnTambah");
+    const lvTugas   = document.getElementById("lvTugas");
+    const tvJumlah  = document.getElementById("tvJumlah");
+    const progres   = document.getElementById("progres");
+    const kosong    = document.getElementById("kosong");
+
+    // LANGKAH 2: pasang pendengar event (setara setOnClickListener)
+    btnTambah.addEventListener("click", tambahTugas);
+    etTugas.addEventListener("keydown", (e) => { if (e.key === "Enter") tambahTugas(); });
+
+    // Alur tambah: ambil teks -> validasi -> simpan ke data -> perbarui tampilan
+    function tambahTugas() {
+      const teks = etTugas.value.trim();
+      if (teks === "") {
+        etTugas.focus();
+        return;
+      }
+      daftarTugas.push({ teks: teks, selesai: false }); // ubah DATA
+      etTugas.value = "";
+      tampilkan();                                      // perbarui layar
+    }
+
+    // Alur centang: balik status selesai -> perbarui tampilan
+    function toggleSelesai(posisi) {
+      daftarTugas[posisi].selesai = !daftarTugas[posisi].selesai;
+      tampilkan();
+    }
+
+    // Alur hapus: hapus dari data -> perbarui tampilan
+    function hapusTugas(posisi) {
+      daftarTugas.splice(posisi, 1);
+      tampilkan();
+    }
+
+    // Menggambar ulang layar dari data (peran adapter + notifyDataSetChanged)
+    function tampilkan() {
+      simpanData();   // alur: data berubah -> simpan -> gambar ulang
+      lvTugas.innerHTML = "";
+
+      daftarTugas.forEach((tugas, posisi) => {
+        const li = document.createElement("li");
+        if (tugas.selesai) li.classList.add("selesai");
+
+        const cek = document.createElement("button");
+        cek.className = "cek";
+        cek.textContent = tugas.selesai ? "✓" : "";
+        cek.addEventListener("click", () => toggleSelesai(posisi));
+
+        const span = document.createElement("span");
+        span.className = "teks";
+        span.textContent = tugas.teks;
+
+        const hapus = document.createElement("button");
+        hapus.className = "hapus";
+        hapus.textContent = "🗑";
+        hapus.addEventListener("click", () => hapusTugas(posisi));
+
+        li.append(cek, span, hapus);
+        lvTugas.appendChild(li);
+      });
+
+      // Ringkasan + bar progres
+      const total = daftarTugas.length;
+      const selesai = daftarTugas.filter((t) => t.selesai).length;
+      tvJumlah.textContent = total === 0
+        ? "Jumlah tugas: 0"
+        : "Jumlah tugas: " + total + " · selesai " + selesai;
+      progres.style.width = total === 0 ? "0%" : (selesai / total) * 100 + "%";
+      kosong.style.display = total === 0 ? "block" : "none";
+    }
+
+    // LANGKAH 3: tampilan awal saat halaman dibuka (setara onCreate)
+    tampilkan();
+
+    // PWA: daftarkan service worker agar aplikasi bisa jalan offline
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
